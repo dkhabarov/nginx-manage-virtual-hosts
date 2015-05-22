@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+#-*- coding: utf8 -*-
+"""
+##########################################################################
+ ngxensite - script for quick virtual host enabling
+
+ Copyright © 2009-2013 Denis 'Saymon21' Khabarov
+ E-Mail: <saymon@hub21.ru>
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License version 3
+ as published by the Free Software Foundation.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##########################################################################
+"""
+import os, sys, subprocess 
+
+NGINX_CONFIG_DIR="/etc/nginx" # nginx config directory
+NGINX_BIN="/usr/sbin/nginx" # path to nginx elf file
+COLOR_MSG=True # enable colorize messags
+
+def print_info(msg, state=None):
+	if COLOR_MSG:
+		if state == 1:
+			print("\033[31m%s\033[0m" % msg) # for state error - red text
+		elif state == 0:
+			print("\033[32m%s\033[0m" % msg) # for state success - green text
+		else:
+			print('\033[1m%s\033[0m' % msg) # default - bold text.
+	else:
+		print(msg)
+
+def test_config():
+	shell=("%s -t -c %s/nginx.conf" %(NGINX_BIN, NGINX_CONFIG_DIR))
+	child = subprocess.Popen(shell, shell = True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=None)
+	streamdata = child.communicate()
+	return child.returncode, "".join(map(str, streamdata))
+
+def get_vhostname():
+	host = None
+	try:
+		host=sys.argv[1] #get host from args
+	except IndexError: #if argument host is none, we get index error.
+		try: #if we get index error, read stdin
+			host = sys.stdin.read()
+		except KeyboardInterrupt: #if receive SIGINT (Ctrl+C) from keyboard, print info about usage, and exit with code 1
+			print_info('\nRecv SIGINT. Exit..',1)
+			print_info('Usage: %s site' % sys.argv[0])
+			sys.exit(1)
+	return host
+
+def main():
+	hostname=get_vhostname().replace('\n','') # Remove new line char in *nix. For win use \r\n
+	if hostname is None or len(hostname) == 0:
+		print_info('Usage: %s site' % sys.argv[0])
+		sys.exit(1)
+	source="%s/sites-available/%s.conf" % (NGINX_CONFIG_DIR, hostname)
+	link_name="%s/sites-enabled/%s" %(NGINX_CONFIG_DIR, hostname)
+	if os.path.isfile(source) == False:
+		print_info("Config file '%s' doesn't exists!" % source, 1)
+		sys.exit(1)
+	if os.path.islink(link_name):
+		print_info("Virtual host '%s' already running!" % hostname,1)
+		sys.exit(1)
+	try:
+		os.symlink(source, link_name)
+	except OSError as errstr:
+		print_info("Error when activating the virtual host '%s': %s" %(hostname,errstr), 1)
+		sys.exit(1)
+
+	code, ngxres = test_config()
+	if code == 1:
+		print_info('nginx config-test error:\n %s' % ngxres, 1)
+		os.unlink(link_name) # remove symlink if config test error.
+		print_info('Please fix it and try again.')
+		sys.exit(1)
+	elif code == 0:
+		print_info("Virtual host '%s' has been activated successfully!" % (hostname), 0)
+		print_info("Run '/etc/init.d/nginx reload' to enable changes")
+		sys.exit(0)
+	
+
+if __name__ == "__main__":
+	main()

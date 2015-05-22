@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+#-*- coding: utf8 -*-
+"""
+##########################################################################
+ ngxdissite - script for quick virtual host disabling
+
+ Copyright © 2009-2013 Denis 'Saymon21' Khabarov
+ E-Mail: <saymon@hub21.ru>
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License version 3
+ as published by the Free Software Foundation.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##########################################################################
+"""
+import os, sys
+NGINX_CONFIG_DIR="/usr/local/etc/nginx"
+NGINX_BIN="/usr/local/sbin/nginx"
+COLOR_MSG=True
+
+def print_info(msg, state=None):
+	if COLOR_MSG:
+		if state == 1:
+			print("\033[31m%s\033[0m" % msg) # for state error - red text
+		elif state == 0:
+			print("\033[32m%s\033[0m" % msg) # for state success - green text
+		else:
+			print('\033[1m%s\033[0m' % msg) # default - bold text.
+	else:
+		print(msg)
+
+def get_vhostname():
+	host = None
+	try:
+		host=sys.argv[1] #get host from args
+	except IndexError: #if argument host is none, we get index error.
+		try: #if we get index error, read stdin
+			host = sys.stdin.read().replace('\n','') # read stdin and remove new line char in *nix.
+		except KeyboardInterrupt: #if receive SIGINT (Ctrl+C from keyboard), print info about usage, and exit with code 1
+			print_info('\nRecv SIGINT. Exit..',1)
+			print_info('Usage: %s site' % sys.argv[0])
+			sys.exit(1)
+	return host
+
+def main():
+	hostname=get_vhostname()
+	if hostname is None or len(hostname) == 0:
+		print_info('Usage: %s site' % sys.argv[0])
+		sys.exit(1)
+	link_name="%s/sites-enabled/%s" %(NGINX_CONFIG_DIR, hostname)
+	if os.path.islink(link_name) != True:
+		print_info("Virtual host '%s' already deactivated or not found!" % hostname,1)
+		sys.exit(1)
+	try:
+		os.unlink(link_name)
+	except OSError as errstr:
+		print_info("Error when activating the virtual host '%s': %s" %(hostname,errstr),1)
+		sys.exit(1)
+	
+	print_info("Virtual host '%s' has been deactivated successfully!" % (hostname),0)
+	print_info("Run '/etc/init.d/nginx reload' to enable changes")
+	sys.exit(0)
+	
+
+if __name__ == "__main__":
+	main()
